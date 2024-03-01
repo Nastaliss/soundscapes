@@ -1,0 +1,11 @@
+GET http://localhost:8000/play/<bar>
+
+###
+
+GET http://localhost:8000/stop
+
+###
+
+GET http://localhost:8000/transition/<bar>
+
+
