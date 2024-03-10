@@ -31,6 +31,12 @@ class Player(object):
             self.heart_beat = BarHeartBeat(self.second_per_bar)
         self.transitionning = False
 
+    def get_duration(self):
+        return self.get_current_playback().duration
+
+    def get_total_bars(self):
+        return self.get_duration() / self.second_per_bar
+
     def play(self, start_bar: int = 0, loop_bar_count: int = None):
         start_time = self.get_time_of_bar(start_bar)
         self.get_current_playback().play()
@@ -57,6 +63,17 @@ class Player(object):
         self.timer = Timer(math.ceil(self.get_bar_count_for_current_playback()) * self.second_per_bar - self.get_current_playback().curr_pos, self._transition_timer_handler, [bar])
         self.timer.start()
 
+    def transition_to_bar_immediately(self, bar: int):
+        if self.transitionning:
+            raise Exception("Already transitionning")
+        if self.get_time_of_bar(bar) > self.get_standby_playback().duration:
+            raise BarOutOfBounds()
+        self.transitionning = True
+        if self.timer:
+            self.timer.cancel()
+        bar_offset = self.get_time_elapsed_from_last_bar_for_current_playback()
+        self._transition_to_bar(bar, bar_offset)
+
     def _transition_timer_handler(self, bar: int):
         self._transition_to_bar(bar)
 
@@ -74,19 +91,28 @@ class Player(object):
         self.teardown()
 
     def get_bar_count_for_current_playback(self):
-        # return self.get_current_playback().get_sound().
         return (self.get_current_playback().curr_pos) / self.second_per_bar
+
+    def get_time_elapsed_from_last_bar_for_current_playback(self):
+        return (self.get_current_playback().curr_pos) % self.second_per_bar
 
     def get_time_of_bar(self, bar: int):
         return self.second_per_bar * bar
 
-    def _transition_to_bar(self, bar: int):
-        print("here")
+    def _transition_to_bar(self, bar: int, offset_seconds: float = 0):
+        """
+        Transition to the given bar of the song, with a fade in and out of the two playbacks
+
+        :param bar: The bar index to transition to
+        :param offset_seconds: The number of seconds to offset the playback by
+
+        The playback will transition from the current playback to the given bar with a fade in and out of the two playbacks
+        """
         print(self.get_bar_count_for_current_playback()/ self.second_per_bar)
 
         self.get_standby_playback().play()
 
-        self.get_standby_playback().seek(self.get_time_of_bar(bar))
+        self.get_standby_playback().seek(self.get_time_of_bar(bar) + offset_seconds)
         self.get_standby_playback().set_volume(0)
         self.get_current_playback().set_volume(100)
 
