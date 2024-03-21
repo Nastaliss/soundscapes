@@ -11,6 +11,7 @@ librosa = "^0.10.1"
 just-playback = "^0.1.7"
 fastapi = "^0.110.0"
 uvicorn = {extras = ["standard"], version = "^0.27.1"}
+websockets = "^12.0"
 
 
 [build-system]
