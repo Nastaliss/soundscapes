@@ -2,7 +2,7 @@ from .lib.sound import Player, BarOutOfBounds
 
 from typing import Union
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,12 +10,30 @@ import os
 import csv
 from typing import TypedDict
 
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
 METADATA_FILE = "songs/metadata.csv"
 # player = Player("./songs/Jon-Hopkins-The-Low-Places.mp3", 152, debug=True)
-player = Player("./songs/HollowKnightGreenPath.mp3", 170, time_signature=3, debug=True)
+player = Player("./songs/HollowKnightGreenPath.mp3", 170, manager, time_signature=3, debug=True)
 # player = Player("./songs/Payday-2-Master-Plan.mp3", 78, debug=True)
 
 ALLOWED_SONGS_FORMATS = ["mp3", "wav"]
+
 
 
 @asynccontextmanager
@@ -39,8 +57,8 @@ def read_root():
     return {"Hello": "World"}
 
 @app.get("/play/{start_bar}")
-def play(start_bar: int = 0):
-    player.play(start_bar, 24 - start_bar)
+async def play(start_bar: int = 0):
+    await player.play(start_bar, 24 - start_bar)
 
     return {"status": "playing"}
 
@@ -48,8 +66,8 @@ class PlayRequest(BaseModel):
     startBar: int
 
 @app.post("/play")
-def play(play_request: PlayRequest):
-    player.play(play_request.startBar)
+async def play(play_request: PlayRequest):
+    await player.play(play_request.startBar)
 
     return {"status": "playing"}
 
@@ -96,7 +114,7 @@ def set_song(song: Song):
     global player
     try:
         player.teardown()
-        player = Player(f"songs/{song.name}", 170, time_signature=3, debug=True)
+        player.reset(f"songs/{song.name}", 170, time_signature=3, debug=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not load song: {e}")
     return {"status": "loaded"}
@@ -170,9 +188,17 @@ async def get():
     return HTMLResponse(html)
 
 
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        await websocket.send_text(f"Message text was: {data}")
+    await manager.connect(websocket)
+    print("Connected")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Message text was: {data}")
+            print(data)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast(f"Client left the chat")
