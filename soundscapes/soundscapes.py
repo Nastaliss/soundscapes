@@ -109,12 +109,21 @@ def read_item(item_id: int, q: Union[str, None] = None):
 class Song(BaseModel):
     name: str
 
+def get_info_from_metadata(song_name: str):
+    with open(METADATA_FILE, "r") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row["song_name"] == song_name:
+                return row
+    return None
+
 @app.post("/song")
 def set_song(song: Song):
     global player
     try:
         player.teardown()
-        player.reset(f"songs/{song.name}", 170, time_signature=3, debug=True)
+        metadata = get_info_from_metadata(song.name)
+        player.reset(f"songs/{song.name}", int(metadata["bpm"]), time_signature=int(metadata["time_signature"]), debug=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not load song: {e}")
     return {"status": "loaded"}
