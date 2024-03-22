@@ -58,7 +58,7 @@ def read_root():
 
 @app.get("/play/{start_bar}")
 async def play(start_bar: int = 0):
-    await player.play(start_bar, 24 - start_bar)
+    player.play(start_bar, 24 - start_bar)
 
     return {"status": "playing"}
 
@@ -67,7 +67,7 @@ class PlayRequest(BaseModel):
 
 @app.post("/play")
 async def play(play_request: PlayRequest):
-    await player.play(play_request.startBar)
+    player.play(play_request.startBar)
 
     return {"status": "playing"}
 

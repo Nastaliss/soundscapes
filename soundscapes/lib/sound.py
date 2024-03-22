@@ -2,6 +2,7 @@ import time
 from threading import Timer
 from just_playback import Playback
 import math
+import asyncio
 
 class BarOutOfBounds(Exception):
     pass
@@ -53,6 +54,8 @@ class Player(object):
 
         self.current_playback_start_time = None
         self.use_heart_beat = debug
+        if self.use_heart_beat:
+            self.heart_beat = BarHeartBeat(self.second_per_bar, manager=self.ws_manager)
         self.transitionning = False
 
     def get_duration(self):
@@ -61,13 +64,15 @@ class Player(object):
     def get_total_bars(self):
         return self.get_duration() / self.second_per_bar
 
-    async def play(self, start_bar: int = 0, loop_bar_count: int = None):
+    def play(self, start_bar: int = 0, loop_bar_count: int = None):
+        print(self.song_bpm)
+        print(self.second_per_bar)
         start_time = self.get_time_of_bar(start_bar)
         self.get_current_playback().play()
         self.get_current_playback().seek(start_time)
 
         if self.use_heart_beat:
-            await self.heart_beat.start()
+            self.heart_beat.start()
 
         if loop_bar_count:
             self.timer = Timer(loop_bar_count * self.second_per_bar, self._loop_timer_handler, [0])
@@ -168,21 +173,27 @@ class BarHeartBeat(object):
         self.heart_beat_interval = hear_beat_interval
 
         self.manager = manager
-        self.timer = None
+        self.run = False
         self.counter = 0
+        print(self.heart_beat_interval)
 
     async def _beat(self):
-        print(f"Heartbeat #{self.counter}!")
+        if not self.run:
+            return
+        await asyncio.sleep(self.heart_beat_interval)
+        asyncio.create_task(self._beat())
+
         self.counter += 1
-        self.timer = Timer(self.heart_beat_interval, self._beat)
-        self.timer.start()
+        print(f"Heartbeat #{self.counter}!")
         await self.manager.broadcast(f"Heartbeat #{self.counter}!")
 
-    async def start(self):
-        await self._beat()
+
+    def start(self):
+        print("Starting heartbeat")
+        self.run = True
+        asyncio.create_task(self._beat())
 
 
     def stop(self):
-        if self.timer:
-            self.timer.cancel()
         self.counter = 0
+        self.run = False
