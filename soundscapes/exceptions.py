@@ -1,4 +1,4 @@
-
+from fastapi import HTTPException
 class SoundScapeBaseException(Exception):
   detail = None
   errorCode = None
@@ -23,10 +23,13 @@ class SongNotLoaded(Exception):
   errorCode = "no_song_loaded"
   status_code = 400
 
-class SongNotPlaying(Exception):
+class SongNotPlaying(HTTPException):
   detail = "No song playing"
   errorCode = "no_song_playing"
   status_code = 400
+
+  def __init__(self, *args, **kwargs):
+      super().__init__(status_code=self.status_code, detail=self.detail, errorCode=self.errorCode)
 
 class AlreadyTransitionning(Exception):
   data = "Already transitioning"

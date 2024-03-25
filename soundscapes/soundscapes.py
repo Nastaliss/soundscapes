@@ -1,4 +1,4 @@
-from .lib.sound import Player, BarOutOfBounds, SongNotLoaded
+from .lib.sound import Player
 
 from typing import Union
 from contextlib import asynccontextmanager
@@ -11,7 +11,7 @@ import csv
 from typing import TypedDict, Any
 import json
 
-from .exceptions import SoundScapeBaseException, SongNotLoaded, BarOutOfBounds
+from .exceptions import SoundScapeBaseException, SongNotLoaded, BarOutOfBounds, SongNotPlaying
 
 
 class ConnectionManager:
@@ -62,8 +62,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.exception_handler(SoundScapeBaseException)
+@app.exception_handler(SongNotPlaying)
 async def soundscapes_exception_handler(request: Request, exc: SoundScapeBaseException):
+    print("HANDLINNNG")
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "errorCode": exc.errorCode, "status_code": exc.status_code}
@@ -97,12 +98,7 @@ class TransitionRequest(BaseModel):
 
 @app.post("/transition")
 def transition_immediately(transition_request: TransitionRequest):
-    try:
-        player.transition_to_bar_immediately(transition_request.bar)
-    except BarOutOfBounds as e:
-        raise HTTPException(status_code=400, detail="Bar out of bounds", errorCode="bar_out_of_bounds")
-    except SongNotLoaded as e:
-        raise HTTPException(status_code=400, detail="No song loaded")
+    player.transition_to_bar_immediately(transition_request.bar)
     return {"status": "transitioning"}
 
 

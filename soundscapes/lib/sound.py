@@ -41,7 +41,7 @@ class Player(object):
         self.current_playback_start_time = None
         if self.heart_beat is not None:
             self.heart_beat.stop()
-        self.heart_beat = BarHeartBeat(self.second_per_bar, manager=self.ws_manager, on_new_bar=self.on_new_bar, on_end=self.on_end)
+        self.heart_beat = BarHeartBeat(self.second_per_bar, manager=self.ws_manager, on_new_bar=self.on_new_bar, on_end=self.on_end, song_duration=self.get_duration())
         self.initialized = True
         self.transitionning = False
 
@@ -49,8 +49,10 @@ class Player(object):
         print(f"New bar: {bar}")
         await self.ws_manager.broadcast(json.dumps({"type": "bar", "bar": bar}))
 
-    def on_end(self):
-        pass
+    async def on_end(self):
+        print("Song ended")
+        self.playing = False
+        await self.ws_manager.broadcast(json.dumps({"type": "end"}))
 
     def get_duration(self):
         return self.get_current_playback().duration
@@ -173,7 +175,7 @@ class Player(object):
 
 class BarHeartBeat(object):
 
-    def __init__(self, hear_beat_interval: float, manager, on_new_bar, on_end):
+    def __init__(self, hear_beat_interval: float, manager, on_new_bar, on_end, song_duration: float = None):
         self.heart_beat_interval = hear_beat_interval
 
         self.manager = manager
@@ -181,6 +183,7 @@ class BarHeartBeat(object):
         self.counter = 0
         self.on_new_bar = on_new_bar
         self.on_end = on_end
+        self.song_duration = song_duration
         print(self.heart_beat_interval)
 
     def set_bar(self, bar: int):
@@ -195,6 +198,10 @@ class BarHeartBeat(object):
 
     async def _beat(self):
         if not self.run:
+            return
+        if self.counter * self.heart_beat_interval >= self.song_duration:
+            await self.on_end()
+            self.stop()
             return
         await asyncio.sleep(self.heart_beat_interval)
         asyncio.create_task(self._beat())
