@@ -62,9 +62,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.exception_handler(SongNotPlaying)
+@app.exception_handler(SoundScapeBaseException)
 async def soundscapes_exception_handler(request: Request, exc: SoundScapeBaseException):
-    print("HANDLINNNG")
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "errorCode": exc.errorCode, "status_code": exc.status_code}
