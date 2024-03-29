@@ -22,3 +22,8 @@ class AlreadyTransitionning(SoundScapeBaseException):
   detail = "Already transitioning"
   errorCode = "already_transitionning"
   status_code = 400
+
+class SongAlreadyPlaying(SoundScapeBaseException):
+  detail = "Already playing"
+  errorCode = "song_already_playing"
+  status_code = 400

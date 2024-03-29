@@ -5,7 +5,7 @@ import math
 import asyncio
 import json
 
-from ..exceptions import SongNotLoaded, AlreadyTransitionning, BarOutOfBounds, SongNotPlaying
+from ..exceptions import SongNotLoaded, AlreadyTransitionning, BarOutOfBounds, SongNotPlaying, SongAlreadyPlaying
 
 
 class Player(object):
@@ -63,6 +63,8 @@ class Player(object):
     def play(self, start_bar: int = 0, loop_bar_count: int = None):
         if not self.initialized:
             raise SongNotLoaded()
+        if self.playing:
+            raise SongAlreadyPlaying()
         start_time = self.get_time_of_bar(start_bar)
         self.get_current_playback().play()
         self.get_current_playback().seek(start_time)

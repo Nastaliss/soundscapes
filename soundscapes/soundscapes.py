@@ -80,10 +80,7 @@ class PlayRequest(BaseModel):
 
 @app.post("/play")
 async def play(play_request: PlayRequest):
-    try:
-        player.play(play_request.startBar)
-    except SongNotLoaded as e:
-        raise HTTPException(status_code=400, detail="No song loaded")
+    player.play(play_request.startBar)
     return {"status": "playing"}
 
 @app.post("/stop")
@@ -108,10 +105,7 @@ def play():
 
 @app.get("/transition/{bar}")
 def transition_to_bar(bar: int):
-    try:
-        player.transition_to_bar_on_next_bar(bar)
-    except BarOutOfBounds as e:
-        raise HTTPException(status_code=400, detail="Bar out of bounds")
+    player.transition_to_bar_on_next_bar(bar)
     return {"status": "transitioning"}
 
 @app.get("/items/{item_id}")
@@ -132,12 +126,8 @@ def get_info_from_metadata(song_name: str):
 @app.post("/song")
 def set_song(song: Song):
     global player
-    try:
-        metadata = get_info_from_metadata(song.name)
-        player.set_song(f"songs/{song.name}", int(metadata["bpm"]), time_signature=int(metadata["time_signature"]))
-    except Exception as e:
-        print(e)
-        raise SoundScapeException(status_code=400, detail=f"Could not load song: {e}", )
+    metadata = get_info_from_metadata(song.name)
+    player.set_song(f"songs/{song.name}", int(metadata["bpm"]), time_signature=int(metadata["time_signature"]))
     return {"status": "loaded"}
 
 @app.get("/songs")
