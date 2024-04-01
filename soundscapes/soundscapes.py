@@ -1,21 +1,50 @@
-from .lib.sound import Player, BarOutOfBounds
+from .lib.sound import Player
 
 from typing import Union
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import csv
-from typing import TypedDict
+from typing import TypedDict, Any
+import json
+
+from .exceptions import SoundScapeBaseException, SongNotLoaded, BarOutOfBounds, SongNotPlaying
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = []
+
+    def _format_message(self, message_type: str, message: str):
+        return json.dumps({
+            "type": message_type,
+            "message": message
+        })
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def respond(self, websocket: WebSocket, message: str):
+        await websocket.send_text(self._format_message("response", message))
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
 
 METADATA_FILE = "songs/metadata.csv"
-# player = Player("./songs/Jon-Hopkins-The-Low-Places.mp3", 152, debug=True)
-player = Player("./songs/HollowKnightGreenPath.mp3", 170, time_signature=3, debug=True)
-# player = Player("./songs/Payday-2-Master-Plan.mp3", 78, debug=True)
+player = Player(manager)
 
 ALLOWED_SONGS_FORMATS = ["mp3", "wav"]
+
 
 
 @asynccontextmanager
@@ -33,24 +62,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(SoundScapeBaseException)
+async def soundscapes_exception_handler(request: Request, exc: SoundScapeBaseException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "errorCode": exc.errorCode, "status_code": exc.status_code}
+    )
+
 
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
+    return HTMLResponse("Soundscape API")
 
-@app.get("/play/{start_bar}")
-def play(start_bar: int = 0):
-    player.play(start_bar, 24 - start_bar)
-
-    return {"status": "playing"}
 
 class PlayRequest(BaseModel):
     startBar: int
 
 @app.post("/play")
-def play(play_request: PlayRequest):
+async def play(play_request: PlayRequest):
     player.play(play_request.startBar)
-
     return {"status": "playing"}
 
 @app.post("/stop")
@@ -64,10 +94,7 @@ class TransitionRequest(BaseModel):
 
 @app.post("/transition")
 def transition_immediately(transition_request: TransitionRequest):
-    try:
-        player.transition_to_bar_immediately(transition_request.bar)
-    except BarOutOfBounds as e:
-        raise HTTPException(status_code=400, detail="Bar out of bounds")
+    player.transition_to_bar_immediately(transition_request.bar)
     return {"status": "transitioning"}
 
 
@@ -78,10 +105,7 @@ def play():
 
 @app.get("/transition/{bar}")
 def transition_to_bar(bar: int):
-    try:
-        player.transition_to_bar_on_next_bar(bar)
-    except BarOutOfBounds as e:
-        raise HTTPException(status_code=400, detail="Bar out of bounds")
+    player.transition_to_bar_on_next_bar(bar)
     return {"status": "transitioning"}
 
 @app.get("/items/{item_id}")
@@ -91,14 +115,19 @@ def read_item(item_id: int, q: Union[str, None] = None):
 class Song(BaseModel):
     name: str
 
+def get_info_from_metadata(song_name: str):
+    with open(METADATA_FILE, "r") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row["song_name"] == song_name:
+                return row
+    return None
+
 @app.post("/song")
 def set_song(song: Song):
     global player
-    try:
-        player.teardown()
-        player = Player(f"songs/{song.name}", 170, time_signature=3, debug=True)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not load song: {e}")
+    metadata = get_info_from_metadata(song.name)
+    player.set_song(f"songs/{song.name}", int(metadata["bpm"]), time_signature=int(metadata["time_signature"]))
     return {"status": "loaded"}
 
 @app.get("/songs")
@@ -113,6 +142,8 @@ class MetadataEntry(TypedDict):
 
 @app.get("/song")
 def get_current_song_info():
+    if player.initialized is False:
+        raise HTTPException(status_code=404, detail="No song loaded")
     song_path = player.song_path.split("/")[-1]
     song: MetadataEntry = None
     with open(METADATA_FILE, "r") as file:
@@ -128,51 +159,20 @@ def get_current_song_info():
         "duration": player.get_duration(),
         "timeSignature": song["time_signature"],
         "barCount": player.get_total_bars(),
-        "bpm": song["bpm"]
+        "bpm": song["bpm"],
+        "playing": player.playing,
+        "currentBar": player.get_bar_count_for_current_playback_from_heartbeat()
     }
-
-html = """
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-        <form action="" onsubmit="sendMessage(event)">
-            <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-            var ws = new WebSocket("ws://localhost:8000/ws");
-            ws.onmessage = function(event) {
-                var messages = document.getElementById('messages')
-                var message = document.createElement('li')
-                var content = document.createTextNode(event.data)
-                message.appendChild(content)
-                messages.appendChild(message)
-            };
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
-    </body>
-</html>
-"""
-
-@app.get("/cc")
-async def get():
-    return HTMLResponse(html)
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        await websocket.send_text(f"Message text was: {data}")
+    await manager.connect(websocket)
+    print("Connected")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.respond(websocket, data)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast(f"Client left the chat")
