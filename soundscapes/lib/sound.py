@@ -41,13 +41,17 @@ class Player(object):
         self.current_playback_start_time = None
         if self.heart_beat is not None:
             self.heart_beat.stop()
-        self.heart_beat = BarHeartBeat(self.second_per_bar, manager=self.ws_manager, on_new_bar=self.on_new_bar, on_end=self.on_end, song_duration=self.get_duration())
+        self.heart_beat = BarHeartBeat(self.second_per_bar, manager=self.ws_manager, sub_bar_count=time_signature, on_new_bar=self.on_new_bar, on_new_sub_bar=self.on_new_sub_bar, on_end=self.on_end, song_duration=self.get_duration())
         self.initialized = True
         self.transitionning = False
 
     async def on_new_bar(self, bar: int):
         print(f"New bar: {bar}")
         await self.ws_manager.broadcast(json.dumps({"type": "bar", "bar": bar}))
+
+    async def on_new_sub_bar(self, sub_bar: int):
+        print(f"New sub_bar: {sub_bar}")
+        await self.ws_manager.broadcast(json.dumps({"type": "subBar", "subBar": sub_bar}))
 
     async def on_end(self):
         print("Song ended")
@@ -177,15 +181,18 @@ class Player(object):
 
 class BarHeartBeat(object):
 
-    def __init__(self, hear_beat_interval: float, manager, on_new_bar, on_end, song_duration: float = None):
+    def __init__(self, hear_beat_interval: float, manager, on_new_bar, on_new_sub_bar, on_end, sub_bar_count, song_duration: float = None):
         self.heart_beat_interval = hear_beat_interval
 
         self.manager = manager
         self.run = False
         self.counter = 0
         self.on_new_bar = on_new_bar
+        self.on_new_sub_bar = on_new_sub_bar
         self.on_end = on_end
         self.song_duration = song_duration
+        self.sub_bar_count = sub_bar_count
+        
         print(self.heart_beat_interval)
 
     def set_bar(self, bar: int):
@@ -197,6 +204,11 @@ class BarHeartBeat(object):
             return
         await self.on_new_bar(self.counter)
         self.counter += 1
+    
+    async def _emit_sub_beat(self, count: int):
+        if not self.run:
+            return
+        await self.on_new_sub_bar(count)
 
     async def _beat(self):
         if not self.run:
@@ -205,10 +217,16 @@ class BarHeartBeat(object):
             await self.on_end()
             self.stop()
             return
+        asyncio.create_task(self._sub_beat())
         await asyncio.sleep(self.heart_beat_interval)
         asyncio.create_task(self._beat())
 
         await self._emit_beat()
+    
+    async def _sub_beat(self):
+        for i in range(self.sub_bar_count):
+            await self._emit_sub_beat(i)
+            await asyncio.sleep(self.heart_beat_interval / self.sub_bar_count)
 
     def start(self):
         asyncio.create_task(self._emit_beat())
@@ -219,3 +237,4 @@ class BarHeartBeat(object):
     def stop(self):
         self.counter = 0
         self.run = False
+
