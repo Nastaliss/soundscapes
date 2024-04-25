@@ -157,9 +157,9 @@ def get_current_song_info():
     return {
         "name": song["song_name"],
         "duration": player.get_duration(),
-        "timeSignature": song["time_signature"],
+        "timeSignature": int(song["time_signature"]),
         "barCount": player.get_total_bars(),
-        "bpm": song["bpm"],
+        "bpm": int(song["bpm"]),
         "playing": player.playing,
         "currentBar": player.get_bar_count_for_current_playback_from_heartbeat()
     }

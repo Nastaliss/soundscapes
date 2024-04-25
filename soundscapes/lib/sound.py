@@ -47,11 +47,11 @@ class Player(object):
 
     async def on_new_bar(self, bar: int):
         print(f"New bar: {bar}")
-        await self.ws_manager.broadcast(json.dumps({"type": "bar", "bar": bar}))
+        await self.ws_manager.broadcast(json.dumps({"type": "bar", "bar": bar, "subBar": 0}))
 
-    async def on_new_sub_bar(self, sub_bar: int):
+    async def on_new_sub_bar(self, bar: int, sub_bar: int):
         print(f"New sub_bar: {sub_bar}")
-        await self.ws_manager.broadcast(json.dumps({"type": "subBar", "subBar": sub_bar}))
+        await self.ws_manager.broadcast(json.dumps({"type": "bar","bar": bar, "subBar": sub_bar}))
 
     async def on_end(self):
         print("Song ended")
@@ -203,12 +203,11 @@ class BarHeartBeat(object):
         if not self.run:
             return
         await self.on_new_bar(self.counter)
-        self.counter += 1
     
     async def _emit_sub_beat(self, count: int):
         if not self.run:
             return
-        await self.on_new_sub_bar(count)
+        await self.on_new_sub_bar(self.counter, count)
 
     async def _beat(self):
         if not self.run:
@@ -221,12 +220,13 @@ class BarHeartBeat(object):
         await asyncio.sleep(self.heart_beat_interval)
         asyncio.create_task(self._beat())
 
+        self.counter += 1
         await self._emit_beat()
-    
+
     async def _sub_beat(self):
-        for i in range(self.sub_bar_count):
-            await self._emit_sub_beat(i)
+        for i in range(self.sub_bar_count - 1):
             await asyncio.sleep(self.heart_beat_interval / self.sub_bar_count)
+            await self._emit_sub_beat(i + 1)
 
     def start(self):
         asyncio.create_task(self._emit_beat())
