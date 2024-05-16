@@ -27,3 +27,13 @@ class SongAlreadyPlaying(SoundScapeBaseException):
   detail = "Already playing"
   errorCode = "song_already_playing"
   status_code = 400
+
+class SongNotFound(SoundScapeBaseException):
+  detail = "Song not found"
+  errorCode = "song_not_found"
+  status_code = 404
+
+class SongInfoNotFound(SoundScapeBaseException):
+  detail = "Song info not found"
+  errorCode = "song_info_not_found"
+  status_code = 404
